@@ -1,0 +1,123 @@
+<script setup>
+import { ref } from 'vue';
+import axios from 'axios';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+const form = ref({
+    username: '',
+    password: ''
+});
+
+const login = async () => {
+    try {
+        const response = await axios.post('/api/auth/login', form.value);
+
+        // Сохраняем данные пользователя (например, в Pinia или localStorage)
+        localStorage.setItem('user', JSON.stringify(response.data));
+
+        // Перенаправляем в личный кабинет
+        router.push(response.data.role === 'teacher' ? '/teacher' : '/student');
+
+    } catch (error) {
+        alert(error.response?.data?.message || 'Ошибка входа');
+    }
+};
+</script>
+
+<template>
+    <div class="auth-page">
+        <div class="auth-card">
+            <h1>Вход в систему</h1>
+            <form @submit.prevent="login">
+                <div class="form-group">
+                    <label>Логин</label>
+                    <input v-model="username" type="text" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input v-model="password" type="password" required>
+                </div>
+                <button type="submit">Войти</button>
+                <p class="auth-switch">
+                    Нет аккаунта? <router-link to="/register">Зарегистрироваться</router-link>
+                </p>
+            </form>
+        </div>
+    </div>
+</template>
+
+
+<style scoped>
+.auth-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #f5f7fa;
+}
+
+.auth-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 400px;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: #333;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+button {
+    width: 100%;
+    padding: 0.75rem;
+    background: #4a6cf7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-top: 1rem;
+}
+
+button:hover {
+    background: #3a5ce4;
+}
+
+.auth-switch {
+    text-align: center;
+    margin-top: 1rem;
+    color: #666;
+}
+
+a {
+    color: #4a6cf7;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+</style>
