@@ -1,29 +1,5 @@
-<script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { useUserStore } from './stores/user'
-
-const router = useRouter()
-const userStore = useUserStore()
-
-const logout = () => {
-    userStore.logout()
-    router.push('/login')
-}
-</script>
-
 <template>
-    <div class="app">
-        <header class="navbar" v-if="userStore.isAuthenticated">
-            <div class="container">
-                <router-link to="/" class="logo">Учебный портал</router-link>
-                <div class="user-info">
-                    <span>{{ userStore.user.username }} ({{ userStore.user.role === 'teacher' ? 'Преподаватель' : 'Студент' }})</span>
-                    <button @click="logout" class="logout-btn">Выход</button>
-                </div>
-            </div>
-        </header>
-        <router-view />
-    </div>
+    <router-view/>
 </template>
 
 <style>
