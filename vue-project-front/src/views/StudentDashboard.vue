@@ -1,52 +1,104 @@
 <template>
-    <div>
-        <h2>Добро пожаловать, студент!</h2>
-        <h3>Задания по PHP:</h3>
-        <div class="dashboard">
-            <h1>Панель студента</h1>
-            <nav>
-                <router-link to="/html-quiz" class="quiz-link">Пройти тест по HTML</router-link>
-            </nav>
+    <div class="dashboard">
+        <h1>Панель студента</h1>
+
+        <div class="quiz-cards">
+            <div class="quiz-card" v-for="quiz in availableQuizzes" :key="quiz.id">
+                <h3>{{ quiz.name }}</h3>
+                <p>{{ quiz.description }}</p>
+                <router-link :to="quiz.path" class="start-btn">Начать тест</router-link>
+            </div>
         </div>
-        <ul>
-            <li v-for="task in tasks" :key="task._id">
-                {{ task.title }}
-                <pre>{{ task.description }}</pre>
-            </li>
-        </ul>
+
+        <div class="previous-results" v-if="previousResults.length">
+            <h2>Предыдущие результаты</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>Тест</th>
+                    <th>Сложность</th>
+                    <th>Результат</th>
+                    <th>Время</th>
+                    <th>Дата</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr v-for="result in previousResults" :key="result._id">
+                    <td>{{ result.testName }}</td>
+                    <td>{{ result.difficulty }}</td>
+                    <td>{{ result.score }}%</td>
+                    <td>{{ result.timeSpent }} сек</td>
+                    <td>{{ new Date(result.createdAt).toLocaleDateString() }}</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </template>
 
-<script setup lang="ts">
-    import {ref, onMounted} from 'vue';
-    import api from '@/services/api';
+<script setup>
+import { ref, onMounted } from 'vue'
+import { api } from '@/services/api'
 
-    interface ITask {
-        _id: string,
-        title: string,
-        description: string,
+const availableQuizzes = ref([
+    {
+        id: 1,
+        name: 'HTML Quiz',
+        description: 'Тест по основам HTML',
+        path: '/html-quiz'
     }
+])
 
-    const tasks = ref<ITask[]>([]);
+const previousResults = ref([])
 
-    onMounted(async () => {
-        const res = await api.get<ITask[]>('/tasks');
-        tasks.value = res.data
-    })
+onMounted(async () => {
+    try {
+        const response = await api.get('/api/results')
+        previousResults.value = response.data
+    } catch (error) {
+        console.error('Ошибка загрузки результатов:', error)
+    }
+})
 </script>
 
-<style scoped>
-    .quiz-link {
-        display: inline-block;
-        margin: 20px 0;
-        padding: 10px 20px;
-        background-color: #42b983;
-        color: white;
-        text-decoration: none;
-        border-radius: 4px;
-    }
 
-    .quiz-link:hover {
-        background-color: #369f6b;
-    }
+<style scoped>
+.quiz-cards {
+    display: flex;
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.quiz-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    width: 300px;
+}
+
+.start-btn {
+    display: inline-block;
+    margin-top: 15px;
+    padding: 8px 16px;
+    background-color: #42b983;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #f2f2f2;
+}
 </style>
