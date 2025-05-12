@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { ResultsService } from './results.service';
 import { Logger } from '@nestjs/common';
 
@@ -11,16 +11,35 @@ export class ResultsController {
     @Post()
     async saveResults(@Body() body) {
         try {
-            this.logger.log('Attempting to save results...');
+            this.logger.log('Saving results...', body);
             const result = await this.resultsService.create(body);
-            this.logger.log('Results saved successfully');
-            return { success: true, data: result };
+            return {
+                success: true,
+                data: result
+            };
         } catch (error) {
-            this.logger.error('Failed to save results', error.stack);
+            this.logger.error('Save error:', error);
             return {
                 success: false,
-                message: 'Failed to save results',
-                error: error.message
+                message: error.message
+            };
+        }
+    }
+
+    @Get('teacher')
+    async getTeacherResults() {
+        try {
+            this.logger.log('Fetching teacher results...');
+            const results = await this.resultsService.findAllForTeacher();
+            return {
+                success: true,
+                data: results
+            };
+        } catch (error) {
+            this.logger.error('Fetch error:', error);
+            return {
+                success: false,
+                message: error.message
             };
         }
     }
