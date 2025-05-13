@@ -1,17 +1,42 @@
+// tasks.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Task, TaskDocument } from './task.schema';
 import { Model } from 'mongoose';
+import { Task, TaskDocument } from './task.schema';
 
 @Injectable()
 export class TasksService {
-    constructor(@InjectModel(Task.name, 'connection1') private model: Model<TaskDocument>) {}
+    constructor(
+        @InjectModel(Task.name, 'connection1')
+        private taskModel: Model<TaskDocument>
+    ) {}
 
-    async create(title: string, description: string) {
-        return this.model.create({ title, description });
+    async findAll() {
+        return this.taskModel.find({ isDeleted: false }).exec();
     }
 
-    async getAll() {
-        return this.model.find();
+    async findActive() {
+        return this.taskModel.find({ isActive: true, isDeleted: false }).exec();
+    }
+
+    async findOne(id: string) {
+        return this.taskModel.findById(id).exec();
+    }
+
+    async create(createTaskDto) {
+        const createdTask = new this.taskModel(createTaskDto);
+        return createdTask.save();
+    }
+
+    async update(id: string, updateTaskDto) {
+        return this.taskModel.findByIdAndUpdate(id, updateTaskDto, { new: true }).exec();
+    }
+
+    async archive(id: string) {
+        return this.taskModel.findByIdAndUpdate(
+            id,
+            { isActive: false },
+            { new: true }
+        ).exec();
     }
 }

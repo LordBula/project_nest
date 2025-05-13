@@ -6,24 +6,13 @@ import { Result, ResultDocument } from './results.schema';
 @Injectable()
 export class ResultsService {
     constructor(
-        @InjectModel(Result.name, 'connection1') // Указываем имя соединения
+        @InjectModel(Result.name, 'connection1')
         private resultModel: Model<ResultDocument>
     ) {}
 
-    async create(resultData: any) {
-        const createdResult = new this.resultModel(resultData);
-        return createdResult.save();
-    }
-
-    async findAllForTeacher() {
-        try {
-            return await this.resultModel.find()
-                .sort({ createdAt: -1 })
-                .lean()
-                .exec();
-        } catch (error) {
-            console.error('Error fetching results:', error);
-            throw error;
-        }
+    async findAll(userId?: string) {
+        const query: any = {};
+        if (userId) query.userId = userId;
+        return this.resultModel.find(query).exec();
     }
 }

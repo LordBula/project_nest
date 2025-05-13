@@ -1,207 +1,242 @@
 <template>
     <div class="teacher-dashboard">
-        <h2>Добро пожаловать, преподаватель!</h2>
+        <header class="dashboard-header">
+            <div class="header-content">
+                <div class="header-info">
+                    <h1>Панель преподавателя</h1>
+                </div>
+                <button @click="logout" class="logout-btn">
+                    <span class="logout-text">Выход</span>
+                </button>
+            </div>
+        </header>
 
         <div class="tabs">
             <button
-                @click="activeTab = 'attendance'"
+                @click="switchTab('attendance')"
                 :class="{ active: activeTab === 'attendance' }"
             >
                 Посещаемость
             </button>
             <button
-                @click="activeTab = 'results'"
+                @click="switchTab('results')"
                 :class="{ active: activeTab === 'results' }"
             >
-                Результаты тестов
+                Результаты
+            </button>
+            <button
+                @click="switchTab('tasks')"
+                :class="{ active: activeTab === 'tasks' }"
+            >
+                Тесты
             </button>
         </div>
 
         <!-- Вкладка посещаемости -->
-        <div v-if="activeTab === 'attendance'" class="attendance-form">
-            <h3>Список студентов:</h3>
-            <div v-for="student in students" :key="student._id" class="student-row">
-                <label>
-                    <input
-                        type="checkbox"
-                        v-model="student.present"
-                        @change="updateAttendance(student)"
-                    >
-                    {{ student.username }}
-                </label>
-                <span class="status" :class="{ present: student.present }">
-          {{ student.present ? 'Присутствовал' : 'Отсутствовал' }}
-        </span>
-            </div>
-
-            <button @click="saveAllAttendance" class="save-btn">
-                Сохранить посещаемость
-            </button>
-        </div>
-
-        <!-- Вкладка результатов тестов -->
-        <div v-if="activeTab === 'results'" class="test-results">
-            <div class="filters">
-                <select v-model="selectedStudent" class="filter-select">
-                    <option value="">Все студенты</option>
-                    <option v-for="student in students" :value="student._id">
-                        {{ student.username }}
-                    </option>
-                </select>
-
-                <select v-model="selectedTest" class="filter-select">
-                    <option value="">Все тесты</option>
-                    <option v-for="test in availableTests" :value="test">
-                        {{ test }}
-                    </option>
-                </select>
-
-                <button @click="refreshResults" class="refresh-btn">
-                    Обновить
+        <div v-if="activeTab === 'attendance'" class="tab-content">
+            <div class="attendance-form">
+                <h2>Посещаемость студентов</h2>
+                <div class="student-list">
+                    <div v-for="student in students" :key="student._id" class="student-item">
+                        <label class="student-label">
+                            <input
+                                type="checkbox"
+                                v-model="student.present"
+                                @change="updateAttendance(student)"
+                            >
+                            <span class="student-name">{{ student.username }}</span>
+                        </label>
+                        <span class="attendance-status" :class="{ present: student.present }">
+              {{ student.present ? 'Присутствует' : 'Отсутствует' }}
+            </span>
+                    </div>
+                </div>
+                <button @click="saveAllAttendance" class="save-btn">
+                    Сохранить посещаемость
                 </button>
             </div>
+        </div>
 
-            <div v-if="loading" class="loading-indicator">
-                Загрузка данных...
+        <!-- Вкладка результатов -->
+        <div v-if="activeTab === 'results'" class="tab-content">
+            <div class="results-container">
+                <h2>Результаты тестов</h2>
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Студент:</label>
+                        <select v-model="selectedStudent">
+                            <option value="">Все студенты</option>
+                            <option v-for="s in students" :key="s._id" :value="s._id">
+                                {{ s.username }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Тест:</label>
+                        <select v-model="selectedTask">
+                            <option value="">Все тесты</option>
+                            <option v-for="t in tasks" :key="t._id" :value="t._id">
+                                {{ t.name }}
+                            </option>
+                        </select>
+                    </div>
+                    <button @click="refreshResults" class="refresh-btn">
+                        Обновить
+                    </button>
+                </div>
+
+                <div v-if="loadingResults" class="loading">Загрузка...</div>
+
+                <div v-else class="results-table-container">
+                    <table class="results-table">
+                        <thead>
+                        <tr>
+                            <th @click="sortResults('student')">Студент</th>
+                            <th @click="sortResults('test')">Тест</th>
+                            <th @click="sortResults('score')">Результат</th>
+                            <th @click="sortResults('date')">Дата</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="result in sortedResults" :key="result._id">
+                            <td>{{ getStudentName(result.userId) }}</td>
+                            <td>{{ getTaskName(result.taskId) }}</td>
+                            <td :class="getResultClass(result.score)">
+                                {{ result.score }}%
+                            </td>
+                            <td>{{ formatDate(result.createdAt) }}</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+        </div>
 
-            <div v-else-if="filteredResults.length === 0" class="no-results">
-                Нет результатов для отображения
+        <!-- Вкладка управления тестами -->
+        <div v-if="activeTab === 'tasks'" class="tab-content">
+            <div class="tasks-container">
+                <div class="tasks-header">
+                    <h2>Управление тестами</h2>
+                    <button @click="openTaskForm(null)" class="create-btn">
+                        + Создать тест
+                    </button>
+                </div>
+
+                <CreateTaskForm
+                    v-if="showTaskForm"
+                    :taskId="editingTaskId"
+                    @save="handleTaskSave"
+                    @cancel="closeTaskForm"
+                />
+
+                <div v-if="loadingTasks" class="loading">Загрузка тестов...</div>
+
+                <div v-else-if="tasks.length === 0" class="no-tasks">
+                    Нет созданных тестов
+                </div>
+
+                <div v-else class="tasks-list">
+                    <div v-for="task in tasks" :key="task._id" class="task-card">
+                        <div class="task-info">
+                            <h3>{{ task.name }}</h3>
+                            <p class="task-description">{{ task.description }}</p>
+                            <div class="task-meta">
+                                <span>Вопросов: {{ task.questions.length }}</span>
+                                <span class="task-status" :class="{ active: task.isActive }">
+                  {{ task.isActive ? 'Активен' : 'Архив' }}
+                </span>
+                            </div>
+                        </div>
+                        <div class="task-actions">
+                            <button @click="openTaskForm(task._id)" class="edit-btn">
+                                Редактировать
+                            </button>
+                            <button
+                                @click="toggleTaskStatus(task._id, !task.isActive)"
+                                class="status-btn"
+                                :class="{ archive: task.isActive }"
+                            >
+                                {{ task.isActive ? 'В архив' : 'Активировать' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            <table v-else class="results-table">
-                <thead>
-                <tr>
-                    <th @click="sortResults('username')">Студент ▼</th>
-                    <th @click="sortResults('testName')">Тест</th>
-                    <th @click="sortResults('difficulty')">Уровень</th>
-                    <th @click="sortResults('score')">Результат</th>
-                    <th @click="sortResults('createdAt')">Дата</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr v-for="result in sortedResults" :key="result._id">
-                    <td>{{ getStudentName(result.userId) }}</td>
-                    <td>{{ result.testName }}</td>
-                    <td>{{ formatDifficulty(result.difficulty) }}</td>
-                    <td :class="getResultClass(result)">
-                        {{ result.score }}% ({{ result.correctAnswers }}/{{ result.totalQuestions }})
-                    </td>
-                    <td>{{ formatDate(result.createdAt) }}</td>
-                </tr>
-                </tbody>
-            </table>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import api from '@/services/api'
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import api from '@/services/api';
+import CreateTaskForm from '@/views/CreateTaskForm.vue';
 
-// Состояние компонента
-const activeTab = ref('attendance')
-const students = ref([])
-const testResults = ref([])
-const selectedStudent = ref('')
-const selectedTest = ref('')
-const loading = ref(false)
-const sortField = ref('createdAt')
-const sortDirection = ref('desc')
+const router = useRouter();
+
+// Состояние приложения
+const activeTab = ref('attendance');
+const students = ref([]);
+const tasks = ref([]);
+const results = ref([]);
+const selectedStudent = ref('');
+const selectedTask = ref('');
+const showTaskForm = ref(false);
+const editingTaskId = ref(null);
+const loadingStudents = ref(false);
+const loadingTasks = ref(false);
+const loadingResults = ref(false);
+const sortField = ref('date');
+const sortDirection = ref('desc');
 
 // Загрузка данных
-const loadData = async () => {
+const loadInitialData = async () => {
+    await Promise.all([
+        loadStudents(),
+        loadTasks(),
+        loadResults()
+    ]);
+};
+
+const loadStudents = async () => {
     try {
-        loading.value = true
-
-        // Параллельная загрузка студентов и результатов
-        const [studentsRes, resultsRes] = await Promise.all([
-            api.get('/users', { params: { role: 'student' } }),
-            api.get('/results/teacher')
-        ])
-
-        students.value = studentsRes.data
-        testResults.value = resultsRes.data.data || []
-
+        loadingStudents.value = true;
+        const response = await api.get('/users', { params: { role: 'student' } });
+        students.value = response.data.map(s => ({ ...s, present: false }));
     } catch (error) {
-        console.error('Ошибка загрузки:', error)
-        alert(`Ошибка загрузки: ${error.response?.data?.message || error.message}`)
+        alert('Ошибка загрузки студентов: ' + error.message);
     } finally {
-        loading.value = false
+        loadingStudents.value = false;
     }
-}
+};
 
-// Фильтрация и сортировка
-const filteredResults = computed(() => {
-    return testResults.value.filter(result => {
-        const matchesStudent = selectedStudent.value
-            ? result.userId === selectedStudent.value
-            : true
-        const matchesTest = selectedTest.value
-            ? result.testName === selectedTest.value
-            : true
-        return matchesStudent && matchesTest
-    })
-})
-
-const sortedResults = computed(() => {
-    return [...filteredResults.value].sort((a, b) => {
-        let valA = a[sortField.value]
-        let valB = b[sortField.value]
-
-        if (sortField.value === 'username') {
-            valA = getStudentName(a.userId)
-            valB = getStudentName(b.userId)
-        }
-
-        if (valA < valB) return sortDirection.value === 'asc' ? -1 : 1
-        if (valA > valB) return sortDirection.value === 'asc' ? 1 : -1
-        return 0
-    })
-})
-
-const sortResults = (field) => {
-    if (sortField.value === field) {
-        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
-    } else {
-        sortField.value = field
-        sortDirection.value = 'asc'
+const loadTasks = async () => {
+    try {
+        loadingTasks.value = true;
+        const response = await api.get('/tasks'); // Измените URL здесь
+        tasks.value = response.data;
+    } catch (error) {
+        alert('Ошибка загрузки тестов: ' + error.message);
+    } finally {
+        loadingTasks.value = false;
     }
-}
+};
 
-// Вспомогательные функции
-const getStudentName = (studentId) => {
-    const student = students.value.find(s => s._id === studentId)
-    return student ? student.username : `Студент (${studentId.slice(0, 4)})`
-}
+const loadResults = async () => {
+    try {
+        loadingResults.value = true;
+        const params = {};
+        if (selectedStudent.value) params.studentId = selectedStudent.value;
+        if (selectedTask.value) params.taskId = selectedTask.value;
 
-const formatDifficulty = (difficulty) => {
-    const levels = { easy: 'Легкий', medium: 'Средний', hard: 'Сложный' }
-    return levels[difficulty] || difficulty
-}
-
-const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    })
-}
-
-const getResultClass = (result) => {
-    if (result.score >= 80) return 'excellent'
-    if (result.score >= 60) return 'good'
-    if (result.score >= 40) return 'average'
-    return 'poor'
-}
-
-const refreshResults = () => {
-    loadData()
-}
-
-const availableTests = computed(() => {
-    return [...new Set(testResults.value.map(r => r.testName))]
-})
+        const response = await api.get('/results', { params });
+        results.value = response.data;
+    } catch (error) {
+        alert('Ошибка загрузки результатов: ' + error.message);
+    } finally {
+        loadingResults.value = false;
+    }
+};
 
 // Методы для посещаемости
 const updateAttendance = async (student) => {
@@ -210,13 +245,12 @@ const updateAttendance = async (student) => {
             studentId: student._id,
             status: student.present ? 'present' : 'absent',
             date: new Date().toISOString().split('T')[0]
-        })
+        });
     } catch (error) {
-        console.error('Ошибка сохранения:', error)
-        student.present = !student.present
-        alert('Не удалось сохранить посещаемость')
+        student.present = !student.present;
+        alert('Ошибка сохранения: ' + error.message);
     }
-}
+};
 
 const saveAllAttendance = async () => {
     try {
@@ -226,18 +260,128 @@ const saveAllAttendance = async () => {
                 status: student.present ? 'present' : 'absent',
                 date: new Date().toISOString().split('T')[0]
             })
-        ))
-        alert('Посещаемость сохранена!')
+        ));
+        alert('Посещаемость сохранена!');
     } catch (error) {
-        console.error('Ошибка сохранения:', error)
-        alert('Ошибка при сохранении посещаемости')
+        alert('Ошибка сохранения: ' + error.message);
     }
-}
+};
+
+// Методы для тестов
+const openTaskForm = (taskId) => {
+    editingTaskId.value = taskId;
+    showTaskForm.value = true;
+};
+
+const closeTaskForm = () => {
+    showTaskForm.value = false;
+    editingTaskId.value = null;
+};
+
+const handleTaskSave = () => {
+    closeTaskForm();
+    loadTasks();
+};
+
+const toggleTaskStatus = async (taskId, newStatus) => {
+    const action = newStatus ? 'активировать' : 'архивировать';
+    if (!confirm(`Вы уверены, что хотите ${action} этот тест?`)) return;
+
+    try {
+        if (newStatus) {
+            await api.patch(`/tasks/${taskId}`, { isActive: true });
+        } else {
+            await api.delete(`/tasks/${taskId}`);
+        }
+        loadTasks();
+    } catch (error) {
+        alert('Ошибка: ' + error.message);
+    }
+};
+
+// Методы для результатов
+const refreshResults = () => {
+    loadResults();
+};
+
+const sortResults = (field) => {
+    if (sortField.value === field) {
+        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortField.value = field;
+        sortDirection.value = 'asc';
+    }
+};
+
+const sortedResults = computed(() => {
+    return [...results.value].sort((a, b) => {
+        let valA, valB;
+
+        switch (sortField.value) {
+            case 'student':
+                valA = getStudentName(a.userId);
+                valB = getStudentName(b.userId);
+                break;
+            case 'test':
+                valA = getTaskName(a.taskId);
+                valB = getTaskName(b.taskId);
+                break;
+            case 'score':
+                valA = a.score;
+                valB = b.score;
+                break;
+            case 'date':
+            default:
+                valA = new Date(a.createdAt);
+                valB = new Date(b.createdAt);
+        }
+
+        return sortDirection.value === 'asc'
+            ? valA > valB ? 1 : -1
+            : valA < valB ? 1 : -1;
+    });
+});
+
+// Вспомогательные методы
+const switchTab = (tab) => {
+    activeTab.value = tab;
+};
+
+const getStudentName = (studentId) => {
+    const student = students.value.find(s => s._id === studentId);
+    return student ? student.username : 'Неизвестный';
+};
+
+const getTaskName = (taskId) => {
+    const task = tasks.value.find(t => t._id === taskId);
+    return task ? task.name : 'Удалённый тест';
+};
+
+const getResultClass = (score) => {
+    if (score >= 80) return 'excellent';
+    if (score >= 60) return 'good';
+    if (score >= 40) return 'average';
+    return 'poor';
+};
+
+const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU');
+};
+
+const logout = async () => {
+    try {
+        await api.post('/auth/logout');
+        router.push('/login');
+    } catch (error) {
+        alert('Ошибка выхода: ' + error.message);
+    }
+};
 
 // Инициализация
 onMounted(() => {
-    loadData()
-})
+    loadInitialData();
+});
 </script>
 
 <style scoped>
@@ -245,151 +389,167 @@ onMounted(() => {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
-    font-family: 'Arial', sans-serif;
+}
+
+.dashboard-header {
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-info h1 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.logout-btn {
+    background: #f5f5f5;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #e74c3c;
 }
 
 .tabs {
     display: flex;
-    margin: 25px 0;
-    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #ddd;
 }
 
 .tabs button {
-    padding: 10px 25px;
+    padding: 10px 20px;
     background: none;
     border: none;
     border-bottom: 3px solid transparent;
     cursor: pointer;
     font-size: 16px;
-    transition: all 0.3s;
 }
 
 .tabs button.active {
-    border-bottom-color: #4CAF50;
-    color: #4CAF50;
-    font-weight: bold;
-}
-
-.tabs button:hover {
-    background-color: #f5f5f5;
-}
-
-/* Стили для вкладки посещаемости */
-.attendance-form {
-    background: white;
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.student-row {
-    display: flex;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid #eee;
-}
-
-.student-row label {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-}
-
-.student-row input[type="checkbox"] {
-    transform: scale(1.2);
-}
-
-.status {
-    padding: 5px 12px;
-    border-radius: 15px;
-    font-size: 14px;
+    border-bottom-color: #3498db;
+    color: #3498db;
     font-weight: 500;
 }
 
-.status.present {
-    background-color: #e8f5e9;
+.tab-content {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Стили для вкладки посещаемости */
+.attendance-form h2 {
+    margin-top: 0;
+}
+
+.student-list {
+    margin: 20px 0;
+}
+
+.student-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.student-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.student-name {
+    font-size: 16px;
+}
+
+.attendance-status {
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 14px;
+    background: #f5f5f5;
+    color: #666;
+}
+
+.attendance-status.present {
+    background: #e8f5e9;
     color: #2e7d32;
 }
 
 .save-btn {
-    margin-top: 20px;
-    padding: 12px 25px;
-    background-color: #4CAF50;
+    background: #3498db;
     color: white;
     border: none;
+    padding: 10px 20px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 16px;
-    transition: background-color 0.3s;
-}
-
-.save-btn:hover {
-    background-color: #3d8b40;
 }
 
 /* Стили для вкладки результатов */
-.test-results {
-    background: white;
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+.results-container h2 {
+    margin-top: 0;
 }
 
 .filters {
     display: flex;
     gap: 15px;
-    margin-bottom: 20px;
-    align-items: center;
+    margin: 20px 0;
+    align-items: flex-end;
 }
 
-.filter-select {
-    padding: 10px 15px;
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.filter-group label {
+    font-size: 14px;
+    color: #666;
+}
+
+.filter-group select {
+    padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
     min-width: 200px;
 }
 
 .refresh-btn {
-    padding: 10px 15px;
-    background-color: #2196F3;
-    color: white;
+    background: #f5f5f5;
     border: none;
+    padding: 8px 15px;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.3s;
 }
 
-.refresh-btn:hover {
-    background-color: #0b7dda;
-}
-
-.loading-indicator,
-.no-results {
-    padding: 20px;
-    text-align: center;
-    color: #666;
-    font-style: italic;
+.results-table-container {
+    margin-top: 20px;
+    overflow-x: auto;
 }
 
 .results-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 15px;
 }
 
 .results-table th {
-    background-color: #f5f5f5;
+    background: #f8f9fa;
     padding: 12px 15px;
     text-align: left;
-    font-weight: 600;
     cursor: pointer;
     user-select: none;
-}
-
-.results-table th:hover {
-    background-color: #eee;
 }
 
 .results-table td {
@@ -398,13 +558,12 @@ onMounted(() => {
 }
 
 .results-table tr:hover {
-    background-color: #f9f9f9;
+    background: #f8f9fa;
 }
 
-/* Стили для результатов */
 .excellent {
     color: #2e7d32;
-    font-weight: bold;
+    font-weight: 500;
 }
 
 .good {
@@ -416,19 +575,133 @@ onMounted(() => {
 }
 
 .poor {
-    color: #d32f2f;
-    font-weight: bold;
+    color: #e53935;
 }
 
-/* Адаптивность */
+/* Стили для вкладки тестов */
+.tasks-container h2 {
+    margin-top: 0;
+}
+
+.tasks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.create-btn {
+    background: #4caf50;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tasks-list {
+    margin-top: 20px;
+}
+
+.task-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.task-info h3 {
+    margin: 0 0 5px 0;
+}
+
+.task-description {
+    margin: 0 0 10px 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.task-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 14px;
+    color: #888;
+}
+
+.task-status {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.task-status.active {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.task-status:not(.active) {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.task-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.edit-btn {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.status-btn {
+    background: #f5f5f5;
+    color: #555;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.status-btn.archive {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
+.loading {
+    text-align: center;
+    padding: 30px;
+    color: #666;
+}
+
+.no-tasks {
+    text-align: center;
+    padding: 30px;
+    color: #888;
+    font-style: italic;
+}
+
 @media (max-width: 768px) {
     .filters {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    .filter-select {
+    .task-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .task-actions {
         width: 100%;
+        justify-content: flex-end;
     }
 }
 </style>
