@@ -155,64 +155,25 @@
             </div>
         </div>
     </div>
+    <div v-if="loading" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Загрузка теста...</p>
+    </div>
 </template>
 
 <script setup>
-import { ref, computed, onUnmounted } from 'vue'
-import api from '@/services/api'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import api from '@/services/api'
 import { useRouter } from 'vue-router'
+
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
-const goBack = () => {
-    if (testStarted.value && !testFinished.value) {
-        if (!confirm('Вы уверены, что хотите прервать тест? Ваши результаты не будут сохранены.')) {
-            return
-        }
-    }
-    router.push('/student')
-}
-
-const difficultyLevels = [
-    { value: 'easy', label: 'Легкий' },
-    { value: 'medium', label: 'Средний' },
-    { value: 'hard', label: 'Сложный' }
-]
-
-const questions = {
-    easy: [
-        {
-            text: "Какой тег используется для создания заголовка первого уровня?",
-            options: [
-                { text: "<h1>", correct: true, explanation: "Тег <h1> используется для заголовков самого высокого уровня." },
-                { text: "<head>", correct: false, explanation: "<head> содержит метаинформацию о документе." },
-                { text: "<header>", correct: false, explanation: "<header> представляет вводную часть секции." }
-            ],
-            timeLimit: 30
-        }
-    ],
-    medium: [
-        {
-            text: "Какой атрибут делает поле ввода обязательным?",
-            options: [
-                { text: "required", correct: true, explanation: "Атрибут required указывает, что поле должно быть заполнено перед отправкой формы." },
-                { text: "placeholder", correct: false, explanation: "placeholder показывает подсказку в поле ввода." }
-            ],
-            timeLimit: 20
-        }
-    ],
-    hard: [
-        {
-            text: "Какой элемент HTML5 предназначен для рисования графики?",
-            options: [
-                { text: "<canvas>", correct: true, explanation: "<canvas> используется для рисования графики через JavaScript." },
-                { text: "<svg>", correct: false, explanation: "<svg> предназначен для векторной графики, но не является частью canvas API." }
-            ],
-            timeLimit: 15
-        }
-    ]
-}
+// Получаем ID теста из параметров маршрута
+const taskId = route.params.id
 
 // Состояние теста
 const testStarted = ref(false)
@@ -224,9 +185,52 @@ const timer = ref(null)
 const timeLeft = ref(0)
 const startTime = ref(0)
 const questionResults = ref([])
+const loading = ref(false)
+const error = ref(null)
+
+// Вопросы теперь будут загружаться с сервера
+const questions = ref({
+    easy: [],
+    medium: [],
+    hard: []
+})
+
+// Загрузка теста с сервера
+const loadTest = async () => {
+    try {
+        loading.value = true
+        error.value = null
+        const response = await api.get(`/tasks/${taskId}`)
+
+        // Преобразуем данные с сервера в нужный формат
+        questions.value = {
+            easy: transformQuestions(response.data.questions.easy),
+            medium: transformQuestions(response.data.questions.medium),
+            hard: transformQuestions(response.data.questions.hard)
+        }
+    } catch (err) {
+        error.value = 'Не удалось загрузить тест'
+        console.error('Ошибка загрузки теста:', err)
+    } finally {
+        loading.value = false
+    }
+}
+
+// Вспомогательная функция для преобразования вопросов
+const transformQuestions = (serverQuestions) => {
+    return serverQuestions.map(q => ({
+        text: q.questionText,
+        options: q.options.map((opt, idx) => ({
+            text: opt.text,
+            correct: idx === q.correctOption,
+            explanation: opt.explanation || 'Объяснение отсутствует'
+        })),
+        timeLimit: q.timeLimit || 30
+    }))
+}
 
 // Вычисляемые свойства
-const filteredQuestions = computed(() => questions[currentDifficulty.value])
+const filteredQuestions = computed(() => questions.value[currentDifficulty.value])
 const currentQuestion = computed(() => filteredQuestions.value[currentQuestionIndex.value])
 const isLastQuestion = computed(() => currentQuestionIndex.value === filteredQuestions.value.length - 1)
 const formattedTime = computed(() => {
@@ -243,10 +247,26 @@ const correctAnswers = computed(() => {
 })
 
 const score = computed(() => {
-    return Math.round((correctAnswers.value / filteredQuestions.value.length) * 100)
+    return filteredQuestions.value.length > 0
+        ? Math.round((correctAnswers.value / filteredQuestions.value.length) * 100)
+        : 0
+})
+
+// Загружаем тест при монтировании компонента
+onMounted(() => {
+    loadTest()
 })
 
 // Методы
+const goBack = () => {
+    if (testStarted.value && !testFinished.value) {
+        if (!confirm('Вы уверены, что хотите прервать тест? Ваши результаты не будут сохранены.')) {
+            return
+        }
+    }
+    router.push('/student')
+}
+
 const getDifficultyInfo = (difficulty) => {
     const info = {
         easy: "30 секунд на вопрос",
@@ -264,6 +284,11 @@ const getScoreClass = (score) => {
 }
 
 const startTest = (difficulty) => {
+    if (filteredQuestions.value.length === 0) {
+        alert('Нет вопросов для этого уровня сложности')
+        return
+    }
+
     currentDifficulty.value = difficulty
     testStarted.value = true
     startTime.value = Date.now()
@@ -271,6 +296,8 @@ const startTest = (difficulty) => {
 }
 
 const startTimer = () => {
+    if (!currentQuestion.value) return
+
     timeLeft.value = currentQuestion.value.timeLimit
     timer.value = setInterval(() => {
         timeLeft.value--
@@ -282,26 +309,28 @@ const startTimer = () => {
 
 const timeUp = () => {
     clearInterval(timer.value)
-    questionResults.value.push({
-        question: currentQuestion.value.text,
-        userAnswer: 'Время вышло',
-        correctAnswer: currentQuestion.value.options.find(o => o.correct).text,
-        correct: false,
-        explanation: currentQuestion.value.options.find(o => o.correct).explanation
-    })
+    if (currentQuestion.value) {
+        questionResults.value.push({
+            question: currentQuestion.value.text,
+            userAnswer: 'Время вышло',
+            correctAnswer: currentQuestion.value.options.find(o => o.correct)?.text || 'Не определено',
+            correct: false,
+            explanation: currentQuestion.value.options.find(o => o.correct)?.explanation || 'Объяснение отсутствует'
+        })
+    }
     nextQuestion()
 }
 
 const nextQuestion = () => {
     // Сохраняем результат текущего вопроса
-    if (selectedOption.value !== null) {
-        const isCorrect = currentQuestion.value.options[selectedOption.value].correct
+    if (selectedOption.value !== null && currentQuestion.value) {
+        const isCorrect = currentQuestion.value.options[selectedOption.value]?.correct || false
         questionResults.value.push({
             question: currentQuestion.value.text,
-            userAnswer: currentQuestion.value.options[selectedOption.value].text,
-            correctAnswer: currentQuestion.value.options.find(o => o.correct).text,
+            userAnswer: currentQuestion.value.options[selectedOption.value]?.text || 'Неизвестный ответ',
+            correctAnswer: currentQuestion.value.options.find(o => o.correct)?.text || 'Не определено',
             correct: isCorrect,
-            explanation: currentQuestion.value.options.find(o => o.correct).explanation
+            explanation: currentQuestion.value.options.find(o => o.correct)?.explanation || 'Объяснение отсутствует'
         })
     }
 
@@ -324,25 +353,37 @@ const finishTest = () => {
 
 const saveResults = async () => {
     try {
-        const response = await api.post('/results', {
-            userId: userStore.user?._id || 'anonymous',
+        if (!userStore.user?._id) {
+            throw new Error('Пользователь не авторизован')
+        }
+
+        const resultData = {
+            userId: userStore.user._id,
+            taskId: taskId,
             testName: 'HTML Quiz',
             difficulty: currentDifficulty.value,
             score: score.value,
             correctAnswers: correctAnswers.value,
             totalQuestions: filteredQuestions.value.length,
             timeSpent: timeSpent.value,
-            details: questionResults.value
-        });
+            answers: questionResults.value.map(result => ({
+                question: result.question,
+                userAnswer: result.userAnswer,
+                isCorrect: result.correct
+            }))
+        }
+
+        const response = await api.post('/results', resultData)
 
         if (response.data.success) {
-            alert('Результаты успешно сохранены!');
+            alert('Результаты успешно сохранены!')
+            router.push('/student')
         } else {
-            alert(`Ошибка: ${response.data.message}`);
+            throw new Error(response.data.message || 'Не удалось сохранить результаты')
         }
     } catch (error) {
-        console.error('Full error:', error);
-        alert(`Не удалось сохранить результаты. Подробности: ${error.response?.data?.message || error.message}`);
+        console.error('Ошибка сохранения результатов:', error)
+        alert(`Ошибка: ${error.response?.data?.message || error.message}`)
     }
 }
 
@@ -360,6 +401,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.loading-spinner {
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 /* Основные стили */
 .quiz-app {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;

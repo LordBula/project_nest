@@ -613,6 +613,10 @@ onMounted(() => {
     margin-bottom: 15px;
 }
 
+.task-info {
+    width: 70%;
+}
+
 .task-info h3 {
     margin: 0 0 5px 0;
 }
