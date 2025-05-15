@@ -15,4 +15,9 @@ export class ResultsService {
         if (userId) query.userId = userId;
         return this.resultModel.find(query).exec();
     }
+
+    async create(resultData: Result): Promise<Result> {
+        const createdResult = new this.resultModel(resultData);
+        return createdResult.save();
+    }
 }

@@ -1,36 +1,50 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Document } from 'mongoose'
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
 
-export type ResultDocument = Result & Document
+export type ResultDocument = Result & Document;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Result {
     @Prop({ required: true })
-    userId: string
+    userId: string;
 
     @Prop({ required: true })
-    testName: string
+    taskId: string;  // Добавляем taskId
 
     @Prop({ required: true })
-    difficulty: string
+    testName: string;
+
+    @Prop({
+        enum: ['easy', 'medium', 'hard'],
+        default: 'medium'
+    })
+    difficulty: string;
 
     @Prop({ required: true })
-    score: number
+    score: number;
 
     @Prop({ required: true })
-    correctAnswers: number
+    correctAnswers: number;
 
     @Prop({ required: true })
-    totalQuestions: number
+    totalQuestions: number;
 
     @Prop({ required: true })
-    timeSpent: number
+    timeSpent: number;
 
-    @Prop({ type: Object })
-    details: Record<string, any>
+    @Prop({ type: [{
+            question: String,
+            userAnswer: String,
+            isCorrect: Boolean
+        }] })
+    answers: {  // Заменяем details на конкретную структуру
+        question: string;
+        userAnswer: string;
+        isCorrect: boolean;
+    }[];
 
     @Prop({ default: Date.now })
-    createdAt: Date
+    createdAt: Date;
 }
 
-export const ResultSchema = SchemaFactory.createForClass(Result)
+export const ResultSchema = SchemaFactory.createForClass(Result);

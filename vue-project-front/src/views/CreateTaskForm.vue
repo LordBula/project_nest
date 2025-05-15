@@ -13,6 +13,15 @@
                 <textarea v-model="form.description"></textarea>
             </div>
 
+            <div class="form-group">
+              <label>Общая сложность теста*</label>
+              <select v-model="form.difficulty" required>
+                <option value="easy">Легкий</option>
+                <option value="medium">Средний</option>
+                <option value="hard">Сложный</option>
+              </select>
+            </div>
+
             <div class="questions-list">
                 <div v-for="(question, qIndex) in form.questions" :key="qIndex" class="question-item">
                     <div class="question-header">
@@ -33,14 +42,7 @@
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group">
-                            <label>Уровень сложности*</label>
-                            <select v-model="question.difficulty" required>
-                                <option value="easy">Легкий</option>
-                                <option value="medium">Средний</option>
-                                <option value="hard">Сложный</option>
-                            </select>
-                        </div>
+
 
                         <div class="form-group">
                             <label>Лимит времени (сек)*</label>
@@ -98,6 +100,9 @@
                     </div>
                 </div>
             </div>
+          <button type="button" @click="addQuestion" class="add-btn">
+            + Добавить вопрос
+          </button>
 
             <div class="form-actions">
                 <button type="button" @click="cancel" class="cancel-btn">
@@ -126,33 +131,37 @@ const emit = defineEmits(['save', 'cancel']);
 
 const editing = ref(false);
 const form = ref({
-    name: '',
-    description: '',
-    questions: [
-        {
-            text: '',
-            options: [
-                { text: '', correct: true, explanation: '' },
-                { text: '', correct: false, explanation: '' }
-            ],
-            difficulty: 'easy',
-            timeLimit: 30
-        }
-    ]
+  name: '',
+  description: '',
+  difficulty: 'medium', // Добавляем поле для общей сложности
+  questions: [
+    {
+      text: '',
+      options: [
+        { text: '', correct: true, explanation: '' },
+        { text: '', correct: false, explanation: '' }
+      ],
+      difficulty: 'easy', // Сложность отдельного вопроса
+      timeLimit: 30
+    }
+  ]
 });
 
 // Загрузка теста для редактирования
 onMounted(async () => {
-    if (props.taskId) {
-        try {
-            const response = await api.get(`/tasks/${props.taskId}`);
-            form.value = response.data.data;
-            editing.value = true;
-        } catch (error) {
-            alert('Не удалось загрузить тест: ' + error.message);
-            emit('cancel');
-        }
+  if (props.taskId) {
+    try {
+      const response = await api.get(`/tasks/${props.taskId}`);
+      form.value = {
+        ...response.data, // предполагая, что сервер возвращает данные напрямую
+        difficulty: response.data.difficulty || 'medium'
+      };
+      editing.value = true;
+    } catch (error) {
+      alert('Не удалось загрузить тест: ' + error.message);
+      emit('cancel');
     }
+  }
 });
 
 const addQuestion = () => {
@@ -162,7 +171,6 @@ const addQuestion = () => {
             { text: '', correct: true, explanation: '' },
             { text: '', correct: false, explanation: '' }
         ],
-        difficulty: 'easy',
         timeLimit: 30
     });
 };

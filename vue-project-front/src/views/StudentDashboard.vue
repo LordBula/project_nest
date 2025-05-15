@@ -1,97 +1,5 @@
-<template>
-    <div class="student-dashboard">
-        <header class="dashboard-header">
-            <div class="header-content">
-                <div class="header-info">
-                    <h1>Панель студента</h1>
-                    <p class="welcome-text">
-                        <i class="fas fa-user"></i> {{ userStore.user.username }}
-                    </p>
-                </div>
-                <button @click="logout" class="logout-btn">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span class="logout-text">Выход</span>
-                </button>
-            </div>
-        </header>
-
-        <section class="quizzes-section">
-            <h2 class="section-title">Доступные тесты</h2>
-
-            <div v-if="loadingTasks" class="loading">
-                <i class="fas fa-spinner fa-spin"></i> Загрузка тестов...
-            </div>
-
-            <div v-else-if="availableTasks.length === 0" class="no-tests">
-                <i class="fas fa-info-circle"></i> Нет доступных тестов
-            </div>
-
-            <div v-else class="quiz-cards">
-                <div v-for="task in availableTasks" :key="task._id" class="quiz-card">
-                    <div class="card-content">
-                        <h3>{{ task.name }}</h3>
-                        <p class="quiz-description">{{ task.description }}</p>
-                        <div class="quiz-meta">
-              <span class="questions-count">
-                <i class="fas fa-question-circle"></i>
-                {{ task.questions.length }} вопросов
-              </span>
-                            <router-link
-                                :to="`/task/${task._id}`"
-                                class="start-btn"
-                            >
-                                <i class="fas fa-play"></i> Начать тест
-                            </router-link>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="results-section" v-if="previousResults.length > 0">
-            <h2 class="section-title">Мои результаты</h2>
-
-            <div class="table-container">
-                <table class="results-table">
-                    <thead>
-                    <tr>
-                        <th>Тест</th>
-                        <th>Сложность</th>
-                        <th>Результат</th>
-                        <th>Время</th>
-                        <th>Дата</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr v-for="result in previousResults" :key="result._id">
-                        <td>{{ result.testName }}</td>
-                        <td>
-                <span class="difficulty-badge" :class="getDifficultyClass(result.difficulty)">
-                  {{ formatDifficulty(result.difficulty) }}
-                </span>
-                        </td>
-                        <td>
-                            <div class="score-container">
-                                <div class="score-bar" :style="{ width: result.score + '%' }"></div>
-                                <span>{{ result.score }}%</span>
-                            </div>
-                        </td>
-                        <td>{{ result.timeSpent }} сек</td>
-                        <td>{{ formatDate(result.createdAt) }}</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <div v-else class="no-results">
-            <i class="fas fa-info-circle"></i> У вас пока нет результатов тестов
-        </div>
-    </div>
-</template>
-
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/services/api';
 import { useUserStore } from '@/stores/user';
@@ -103,368 +11,471 @@ const availableTasks = ref([]);
 const previousResults = ref([]);
 const loadingTasks = ref(false);
 const loadingResults = ref(false);
+const errorTasks = ref(null);
+const errorResults = ref(null);
 
 const loadTasks = async () => {
-    try {
-        loadingTasks.value = true;
-        const response = await api.get('/tasks/active'); // И здесь
-        availableTasks.value = response.data;
-    } catch (error) {
-        alert('Ошибка загрузки тестов: ' + error.message);
-    } finally {
-        loadingTasks.value = false;
-    }
+  try {
+    loadingTasks.value = true;
+    errorTasks.value = null;
+
+    const response = await api.get('/tasks/active');
+    console.log('Ответ сервера (тесты):', response.data); // Для отладки
+
+    // Обработка разных форматов ответа
+    const tasksData = response.data?.data || response.data || [];
+
+    availableTasks.value = tasksData.map(task => ({
+      id: task._id || task.id,
+      name: task.name || 'Без названия',
+      description: task.description || '',
+      difficulty: task.difficulty,
+      createdAt: task.createdAt || new Date().toISOString(),
+      quizPath: `/html-quiz/${task._id || task.id}`
+    }));
+
+  } catch (error) {
+    errorTasks.value = `Ошибка загрузки тестов: ${error.response?.data?.message || error.message}`;
+    console.error('Ошибка:', error);
+  } finally {
+    loadingTasks.value = false;
+  }
 };
+
 
 const loadResults = async () => {
-    try {
-        loadingResults.value = true;
-        const response = await api.get('/results', {
-            params: { userId: userStore.user._id }
-        });
-        previousResults.value = response.data;
-    } catch (error) {
-        console.error('Ошибка загрузки результатов:', error);
-    } finally {
-        loadingResults.value = false;
+  try {
+    loadingResults.value = true;
+    errorResults.value = null;
+
+    if (!userStore.user?._id) {
+      throw new Error('Пользователь не авторизован');
     }
+
+    const response = await api.get('/results', {
+      params: { userId: userStore.user._id }
+    });
+
+    // Обрабатываем возможные форматы ответа
+    previousResults.value = Array.isArray(response.data?.data)
+        ? response.data.data
+        : Array.isArray(response.data)
+            ? response.data
+            : [];
+
+  } catch (error) {
+    errorResults.value = 'Ошибка загрузки результатов: ' + (error.response?.data?.message || error.message);
+    console.error('Ошибка загрузки результатов:', error);
+  } finally {
+    loadingResults.value = false;
+  }
 };
 
+
 const formatDifficulty = (difficulty) => {
-    const levels = {
-        easy: 'Легкий',
-        medium: 'Средний',
-        hard: 'Сложный'
-    };
-    return levels[difficulty] || difficulty;
+  const levels = {
+    easy: 'Легкий',
+    medium: 'Средний',
+    hard: 'Сложный'
+  };
+  return levels[difficulty] || difficulty;
 };
 
 const getDifficultyClass = (difficulty) => {
-    return difficulty || 'default';
+  return `difficulty-${difficulty}`;
 };
 
 const formatDate = (dateString) => {
+  if (!dateString) return 'Дата не указана';
+  try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU');
+    return isNaN(date.getTime())
+        ? 'Некорректная дата'
+        : date.toLocaleDateString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+  } catch {
+    return dateString;
+  }
+};
+
+const formatScore = (score) => {
+  return typeof score === 'number' ? `${score}%` : score;
+};
+
+const getScoreClass = (score) => {
+  if (typeof score !== 'number') return '';
+  if (score >= 80) return 'score-excellent';
+  if (score >= 60) return 'score-good';
+  if (score >= 40) return 'score-average';
+  return 'score-poor';
 };
 
 const logout = async () => {
-    try {
-        await userStore.logout();
-        router.push('/login');
-    } catch (error) {
-        alert('Ошибка при выходе: ' + error.message);
-    }
+  try {
+    await userStore.logout();
+    router.push('/login');
+  } catch (error) {
+    alert('Ошибка при выходе: ' + error.message);
+  }
 };
 
-onMounted(() => {
+// Автоматически обновляем данные при изменении авторизации
+userStore.$subscribe(() => {
+  if (userStore.isAuth) {
     loadTasks();
     loadResults();
+  }
+});
+
+onMounted(() => {
+  if (userStore.isAuth) {
+    loadTasks();
+    loadResults();
+  } else {
+    router.push('/login');
+  }
 });
 </script>
 
+<template>
+  <div class="student-dashboard">
+    <header class="dashboard-header">
+      <h1>Панель студента</h1>
+      <button @click="logout" class="logout-btn">Выйти</button>
+    </header>
+
+    <div class="dashboard-content">
+      <!-- Секция доступных тестов -->
+      <section class="tasks-section">
+        <h2>Доступные тесты</h2>
+
+        <div v-if="loadingTasks" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Загрузка тестов...</span>
+        </div>
+
+        <div v-else-if="errorTasks" class="error-message">
+          {{ errorTasks }}
+          <button @click="loadTasks" class="retry-btn">Повторить попытку</button>
+        </div>
+
+        <div v-else-if="availableTasks.length === 0" class="empty-state">
+          Нет доступных тестов
+        </div>
+
+        <div v-else class="tasks-grid">
+          <router-link
+              v-for="task in availableTasks"
+              :key="task.id"
+              :to="task.quizPath"
+              class="task-card"
+              tag="div"
+          >
+            <div class="task-header">
+              <h3>{{ task.name }}</h3>
+              <div class="task-meta">
+  <span
+      :class="getDifficultyClass(task.difficulty)"
+      class="difficulty-badge"
+  >
+    {{ formatDifficulty(task.difficulty) }}
+  </span>
+              </div>
+            </div>
+            <p class="task-description">{{ task.description }}</p>
+            <div class="task-footer">
+              <span class="task-date">Добавлен: {{ formatDate(task.createdAt) }}</span>
+              <button class="start-btn">Начать тест</button>
+            </div>
+          </router-link>
+        </div>
+      </section>
+
+      <!-- Секция предыдущих результатов -->
+      <section class="results-section">
+        <h2>Ваши результаты</h2>
+
+        <div v-if="loadingResults" class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Загрузка результатов...</span>
+        </div>
+
+        <div v-else-if="errorResults" class="error-message">
+          {{ errorResults }}
+          <button @click="loadResults" class="retry-btn">Повторить попытку</button>
+        </div>
+
+        <div v-else-if="previousResults.length === 0" class="empty-state">
+          Нет сохраненных результатов
+        </div>
+
+        <div v-else class="results-table">
+          <table>
+            <thead>
+            <tr>
+              <th>Тест</th>
+              <th>Сложность</th>
+              <th>Дата</th>
+              <th>Результат</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="result in previousResults" :key="result._id">
+              <td>{{ result.testName || 'Неизвестный тест' }}</td>
+              <td>
+                                    <span
+                                        v-if="result.difficulty"
+                                        :class="getDifficultyClass(result.difficulty)"
+                                        class="difficulty-badge"
+                                    >
+    {{ formatDifficulty(result.difficulty) }}
+  </span>
+                <span v-else class="difficulty-badge difficulty-unknown">
+    Не указана
+  </span>
+              </td>
+              <td>{{ formatDate(result.createdAt || result.date) }}</td>
+              <td :class="getScoreClass(result.score)">
+                {{ formatScore(result.score) }}
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
 <style scoped>
+.tasks-grid a {
+  text-decoration: none;
+  color: inherit;
+}
+
 .student-dashboard {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #333;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 .dashboard-header {
-    margin-bottom: 2.5rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-}
-
-.header-info {
-    flex: 1;
-}
-
-.header-info h1 {
-    margin: 0 0 0.5rem 0;
-    font-size: 2.2rem;
-    color: #2c3e50;
-}
-
-.welcome-text {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    color: #7f8c8d;
-    font-size: 1.1rem;
-}
-
-.welcome-text i {
-    font-size: 1.1em;
-    color: #3498db;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
 }
 
 .logout-btn {
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 15px;
-    color: #e74c3c;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transition: all 0.3s ease;
-    font-weight: 500;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.3s;
 }
 
 .logout-btn:hover {
-    background: rgba(231, 76, 60, 0.1);
-    transform: translateY(-1px);
+  background: #c0392b;
 }
 
-.logout-btn i {
-    transition: transform 0.2s ease;
+.dashboard-content {
+  display: grid;
+  gap: 40px;
 }
 
-.logout-btn:hover i {
-    transform: translateX(2px);
+.tasks-section, .results-section {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
-.section-title {
-    font-size: 1.8rem;
-    color: #2c3e50;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #f0f0f0;
+h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #2c3e50;
 }
 
-.quiz-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin: 2rem 0;
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7f8c8d;
 }
 
-.quiz-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    overflow: hidden;
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
 }
 
-.quiz-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.card-content {
-    padding: 1.5rem;
+.error-message {
+  color: #e74c3c;
+  background: #fadbd8;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
 }
 
-.quiz-card h3 {
-    font-size: 1.3rem;
-    color: #3498db;
-    margin-bottom: 0.75rem;
+.retry-btn {
+  margin-left: 10px;
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.quiz-description {
-    color: #7f8c8d;
-    line-height: 1.5;
-    margin-bottom: 1.5rem;
+.empty-state {
+  color: #7f8c8d;
+  text-align: center;
+  padding: 20px;
 }
 
-.quiz-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 1rem;
+.tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
 }
 
-.questions-count {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.9rem;
-    color: #666;
+.task-card {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
 
-.start-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0.75rem 1.5rem;
-    background-color: #4CAF50;
-    color: white;
-    text-decoration: none;
-    border-radius: 6px;
-    font-weight: 500;
-    transition: background-color 0.3s;
-    border: none;
-    cursor: pointer;
+.task-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-.start-btn:hover {
-    background-color: #3d8b40;
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
 }
 
-.results-section {
-    margin-top: 3rem;
-}
-
-.table-container {
-    overflow-x: auto;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    margin-top: 1.5rem;
-}
-
-.results-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-}
-
-.results-table th {
-    background-color: #f8f9fa;
-    padding: 1rem;
-    text-align: left;
-    font-weight: 600;
-    color: #2c3e50;
-}
-
-.results-table td {
-    padding: 1rem;
-    border-top: 1px solid #f0f0f0;
-    vertical-align: middle;
-}
-
-.results-table tr:hover {
-    background-color: #f8f9fa;
+.task-meta {
+  display: flex;
+  gap: 5px;
 }
 
 .difficulty-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
 }
 
-.difficulty-badge.easy {
-    background-color: #d4edda;
-    color: #155724;
+.difficulty-easy {
+  background: #d5f5e3;
+  color: #27ae60;
 }
 
-.difficulty-badge.medium {
-    background-color: #fff3cd;
-    color: #856404;
+.difficulty-medium {
+  background: #fef9e7;
+  color: #f39c12;
 }
 
-.difficulty-badge.hard {
-    background-color: #f8d7da;
-    color: #721c24;
+.difficulty-hard {
+  background: #fadbd8;
+  color: #c0392b;
 }
 
-.difficulty-badge.default {
-    background-color: #e2e3e5;
-    color: #383d41;
+.task-description {
+  color: #7f8c8d;
+  margin-bottom: 15px;
 }
 
-.score-container {
-    position: relative;
-    display: inline-block;
-    width: 100px;
-    height: 24px;
-    background: #f0f0f0;
-    border-radius: 12px;
-    overflow: hidden;
+.task-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #95a5a6;
 }
 
-.score-bar {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    background: linear-gradient(90deg, #4CAF50, #8BC34A);
-    border-radius: 12px 0 0 12px;
+.start-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  pointer-events: none;
 }
 
-.score-container span {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    text-align: center;
-    line-height: 24px;
-    font-size: 0.85rem;
-    color: white;
-    mix-blend-mode: difference;
+.results-table {
+  overflow-x: auto;
 }
 
-.loading {
-    text-align: center;
-    padding: 2rem;
-    color: #7f8c8d;
-    font-size: 1.1rem;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
+table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
-.loading i {
-    font-size: 1.5rem;
+th, td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
 }
 
-.no-tests,
-.no-results {
-    text-align: center;
-    padding: 2rem;
-    color: #7f8c8d;
-    font-size: 1.1rem;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
+th {
+  background: #f8f9fa;
+  font-weight: 500;
 }
 
-.no-tests i,
-.no-results i {
-    font-size: 1.5rem;
+tr:hover {
+  background: #f8f9fa;
+}
+
+.score-excellent {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.score-good {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.score-average {
+  color: #e67e22;
+}
+
+.score-poor {
+  color: #e74c3c;
 }
 
 @media (max-width: 768px) {
-    .header-content {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+  .tasks-grid {
+    grid-template-columns: 1fr;
+  }
 
-    .logout-btn {
-        align-self: flex-end;
-        padding: 6px 12px;
-    }
-
-    .logout-text {
-        display: none;
-    }
-
-    .logout-btn i {
-        font-size: 1.2em;
-    }
-
-    .quiz-cards {
-        grid-template-columns: 1fr;
-    }
-
-    .dashboard {
-        padding: 1rem;
-    }
+  th, td {
+    padding: 8px 10px;
+  }
 }
 </style>

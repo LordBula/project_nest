@@ -33,6 +33,13 @@ export class Task {
     @Prop({ required: true })
     name: string;
 
+    @Prop({
+        required: true,
+        enum: ['easy', 'medium', 'hard'],
+        default: 'medium'
+    })
+    difficulty: string;
+
     @Prop()
     description?: string;
 

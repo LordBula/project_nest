@@ -35,11 +35,10 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true, role: 'teacher' }
     },
     {
-        path: '/html-quiz/:id?',
+        path: '/html-quiz/:id',
         name: 'HtmlQuiz',
         component: () => import('@/views/HtmlQuiz.vue'),
-        meta: { requiresAuth: true, role: 'student' },
-        props: true // Добавляем эту строку
+        props: true // Это позволит передавать параметр как props
     }
 ]
 

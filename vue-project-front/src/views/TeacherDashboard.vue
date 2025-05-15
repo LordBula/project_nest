@@ -167,12 +167,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch} from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/services/api';
 import CreateTaskForm from '@/views/CreateTaskForm.vue';
 
 const router = useRouter();
+
+import { useUserStore } from '@/stores/user';
+
+const userStore = useUserStore();
 
 // Состояние приложения
 const activeTab = ref('attendance');
@@ -188,6 +192,7 @@ const loadingTasks = ref(false);
 const loadingResults = ref(false);
 const sortField = ref('date');
 const sortDirection = ref('desc');
+
 
 // Загрузка данных
 const loadInitialData = async () => {
@@ -371,7 +376,7 @@ const formatDate = (dateString) => {
 
 const logout = async () => {
     try {
-        await api.post('/auth/logout');
+      await userStore.logout();
         router.push('/login');
     } catch (error) {
         alert('Ошибка выхода: ' + error.message);
